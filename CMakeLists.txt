@@ -15,7 +15,7 @@ project(particles-metal)
     )
 
     # TODO https://gitlab.kitware.com/cmake/community/-/wikis/doc/cmake/platform_dependent_issues/HowToUseExistingOSXFrameworks
-    target_link_libraries(particles-metal PRIVATE glfw glm Dear-ImGui "-framework Metal -framework QuartzCore")
+    target_link_libraries(particles-metal PRIVATE glfw glm Dear-ImGui "-framework Metal -framework QuartzCore -framework MetalPerformanceShaders")
     target_include_directories(particles-metal PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src)
 
     # set_source_files_properties(src/main.cpp PROPERTIES COMPILE_FLAGS -xobjective-c++)

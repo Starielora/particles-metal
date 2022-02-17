@@ -14,6 +14,7 @@
 #include <filesystem>
 
 #import <Metal/Metal.h>
+#include <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #import <QuartzCore/QuartzCore.h>
 
 #include <list>
@@ -36,6 +37,11 @@ auto emitters = std::list<particles::metal::Emitter>();
 auto emitterDescriptor = particles::metal::Emitter::Descriptor{};
 int aliveParticles = 0;
 
+bool blur = true;
+bool bloom = true;
+float blurSigma = 9.0f;
+int bloomIterations = 1;
+
 int main()
 {
     id<MTLDevice> gpu = MTLCreateSystemDefaultDevice();
@@ -48,6 +54,14 @@ int main()
 
     particles::metal::imgui::init(gpu, window);
     std::vector<float> fpsValues(100);
+
+    MTLTextureDescriptor* descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:SCR_WIDTH height:SCR_HEIGHT mipmapped:false];
+    descriptor.usage = (MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite | MTLTextureUsageRenderTarget);
+    descriptor.storageMode = MTLStorageModePrivate;
+    id<MTLTexture> particlesTexture = [gpu newTextureWithDescriptor:descriptor];
+    id<MTLTexture> blurTexture = [gpu newTextureWithDescriptor:descriptor];
+    id<MTLTexture> bloomTexture = [gpu newTextureWithDescriptor:descriptor];
+    id<MTLTexture> finalTexture = [gpu newTextureWithDescriptor:descriptor];
 
     while (!glfwWindowShouldClose(window))
     {
@@ -62,40 +76,78 @@ int main()
         @autoreleasepool {
 
             id<CAMetalDrawable> surface = [metalLayer nextDrawable];
-            MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
+            MTLRenderPassDescriptor *particlesRenderPass = [MTLRenderPassDescriptor renderPassDescriptor];
     //        // pass.colorAttachments[0].clearColor = color;
-            pass.colorAttachments[0].loadAction  = MTLLoadActionClear;
-            pass.colorAttachments[0].storeAction = MTLStoreActionStore;
-            pass.colorAttachments[0].texture = surface.texture;
+            particlesRenderPass.colorAttachments[0].loadAction  = MTLLoadActionClear;
+            particlesRenderPass.colorAttachments[0].storeAction = MTLStoreActionStore;
+            particlesRenderPass.colorAttachments[0].texture = particlesTexture;
             id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
             handleInput(window, currentFrame, deltaTime, camera, gpu, library, commandBuffer);
-            for (auto&& emitter : emitters)
+
+            // Particles render pass
             {
-                emitter.update(currentFrame, commandBuffer);
+                for (auto&& emitter : emitters)
+                {
+                    emitter.update(currentFrame, commandBuffer);
+                }
+
+                id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:particlesRenderPass];
+                for (auto emitter = emitters.begin(); emitter != emitters.end(); emitter++)
+                {
+                    if (emitter->isDead())
+                    {
+                        emitter = emitters.erase(emitter);
+                    }
+                    else
+                    {
+                        emitter->draw(particlesRenderPass, camera, encoder);
+                        aliveParticles += emitter->descriptor().particlesCount;
+                    }
+                }
+                [encoder endEncoding];
             }
 
-            id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:pass];
-            for (auto emitter = emitters.begin(); emitter != emitters.end(); emitter++)
+            finalTexture = particlesTexture;
+
+            // Particles blur pass
             {
-                if (emitter->isDead())
+                if (blur)
                 {
-                    emitter = emitters.erase(emitter);
-                }
-                else
-                {
-                    emitter->draw(pass, camera, encoder);
-                    aliveParticles += emitter->descriptor().particlesCount;
+                    MPSImageGaussianBlur* gaussianBlur = [[MPSImageGaussianBlur alloc] initWithDevice:gpu sigma:blurSigma];
+                    gaussianBlur.label = [NSString stringWithUTF8String:"MPS Gaussian blur"];
+                    [gaussianBlur encodeToCommandBuffer:commandBuffer sourceTexture:particlesTexture destinationTexture:blurTexture];
+                    finalTexture = blurTexture;
                 }
             }
 
-            particles::metal::imgui::newFrame(pass);
+            // Particle blend pass
+            {
+                if (bloom)
+                {
+                    MPSImageAdd* add = [[MPSImageAdd alloc] initWithDevice:gpu];
+                    [add encodeToCommandBuffer:commandBuffer primaryTexture:finalTexture secondaryTexture:particlesTexture destinationTexture:bloomTexture];
+                    finalTexture = bloomTexture;
+                }
+            }
+
+            MTLRenderPassDescriptor *imguiPass = [MTLRenderPassDescriptor renderPassDescriptor];
+            imguiPass.colorAttachments[0].loadAction  = MTLLoadActionLoad;
+            imguiPass.colorAttachments[0].storeAction = MTLStoreActionStore;
+            imguiPass.colorAttachments[0].texture = finalTexture;
+            id<MTLRenderCommandEncoder> imguiEncoder = [commandBuffer renderCommandEncoderWithDescriptor:imguiPass];
+
+            particles::metal::imgui::newFrame(imguiPass);
             particles::imgui::drawCameraPane(camera);
             particles::imgui::drawFpsPlot(fpsValues);
-            particles::imgui::drawParticleSystemPane(emitterDescriptor, aliveParticles);
+            particles::imgui::drawParticleSystemPane(emitterDescriptor, aliveParticles, blur, bloom, blurSigma, bloomIterations);
             aliveParticles = 0;
-            particles::metal::imgui::render(commandBuffer, encoder);
+            particles::metal::imgui::render(commandBuffer, imguiEncoder);
+            [imguiEncoder endEncoding];
 
-            [encoder endEncoding];
+            id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
+            [blit copyFromTexture:finalTexture toTexture:surface.texture];
+            [blit endEncoding];
+
             [commandBuffer presentDrawable:surface];
             [commandBuffer commit];
         }

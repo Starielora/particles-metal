@@ -72,7 +72,7 @@ namespace particles::imgui
         ImGui::End();
     }
 
-    void drawParticleSystemPane(particles::metal::Emitter::Descriptor& descriptor, int aliveParticles)
+    void drawParticleSystemPane(particles::metal::Emitter::Descriptor& descriptor, int aliveParticles, bool& blur, bool& bloom, float& sigma, int& iterations)
     {
         ImGui::Begin("Particle system");
         ImGui::Text((std::string("Alive particles: ") + std::to_string(aliveParticles)).c_str());
@@ -114,16 +114,14 @@ namespace particles::imgui
         ImGui::SameLine();
         ImGui::RadioButton("Triangle", &descriptor.shape, 2);
 
-//        ImGui::SliderFloat("Thickness", &particleSystem.shapeThickness(), 0.0f, 1.f);
-//
-//        ImGui::Checkbox("Gaussian blur", &gaussianBlur.enabled);
-//        ImGui::BeginDisabled(!gaussianBlur.enabled);
-//        ImGui::SliderInt("Iterations", &gaussianBlur.iterations, 1, 20);
-//        ImGui::Checkbox("Bloom", &additiveBlend.enabled);
-//        ImGui::BeginDisabled(!additiveBlend.enabled);
-//        ImGui::SliderFloat("Factor", &additiveBlend.factor, 0.0f, 10.f);
-//        ImGui::EndDisabled();
-//        ImGui::EndDisabled();
+        ImGui::Checkbox("Gaussian blur", &blur);
+        ImGui::BeginDisabled(!blur);
+        ImGui::SliderFloat("Sigma", &sigma, 0.0f, 20.f);
+        ImGui::Checkbox("Bloom", &bloom);
+        ImGui::BeginDisabled(!bloom);
+        ImGui::SliderInt("Iterations", &iterations, 0, 10);
+        ImGui::EndDisabled();
+        ImGui::EndDisabled();
 //
 //        ImGui::PlotLines("draw [ms]", &particlesDrawTimes[0], particlesDrawTimes.size(), 0, nullptr, 0.f, 16.f, ImVec2(0, 100.f));
 
