@@ -44,9 +44,8 @@ fragment float4 circle(VertexShaderOutput in [[stage_in]]
                        , constant float& thickness [[buffer(0)]]
                        )
 {
-    float finalThickness = thickness / 2.f; // Circle has radius of 0.5 instead of 1
     point = point + float2(-0.5, -0.5);
-    float len = length(point);
+    half len = length(point);
     if (len < (0.5 - thickness) || len > 0.5)
         discard_fragment();
 
@@ -60,10 +59,10 @@ fragment float4 square(
                        )
 {
     point = point + float2(-0.5, -0.5);
-    float x = point.x;
-    float y = point.y;
-    float lowBound = -0.5 + thickness/2;
-    float highBound = 0.5 - thickness/2;
+    half x = point.x;
+    half y = point.y;
+    half lowBound = -0.5 + thickness/2;
+    half highBound = 0.5 - thickness/2;
 
     if (x > lowBound && x < highBound && y > lowBound && y < highBound)
         discard_fragment();
@@ -76,15 +75,15 @@ fragment float4 triangle(VertexShaderOutput in [[stage_in]]
                          , constant float& thickness [[buffer(0)]])
 {
     point = point + float2(-0.5, -0.5);
-    float x = point.x;
-    float y = point.y;
+    half x = point.x;
+    half y = point.y;
 
     // outer triangle
-    float x1 = (y - 0.5) / 2.0; // point on left line
-    float x2 = (y - 0.5) / -2.0; // point on right line
+    half x1 = (y - 0.5) / 2.0; // point on left line
+    half x2 = (y - 0.5) / -2.0; // point on right line
 
-    float d1 = x1 - x;
-    float d2 = x2 - x;
+    half d1 = x1 - x;
+    half d2 = x2 - x;
 
     if (d1 * d2 > 0) // if both have same sign
         discard_fragment();

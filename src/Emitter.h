@@ -115,23 +115,31 @@ namespace particles::metal
             int shape = 1; // 1 - circle, 2 - square, 3 - triangle
         };
 
-        Emitter(Descriptor descriptor, id<MTLDevice> gpu, id<MTLLibrary> library)
+        Emitter(Descriptor descriptor, id<MTLDevice> gpu, id<MTLLibrary> library, id<MTLCommandBuffer> commandBuffer)
             : _descriptor(std::move(descriptor))
             , _life(_descriptor.lifeTimeFrames)
             , _particlesUpdatePipelineState(getComputePipelineState(gpu, library))
             , _renderPipelineState(getRenderPipelineState(gpu, library, _descriptor.shape))
-            , _buffer([gpu newBufferWithLength:sizeof(Particle) * _descriptor.particlesCount  options:MTLResourceStorageModeShared]) // TODO switch resource to private
+//            , _buffer([gpu newBufferWithLength:sizeof(Particle) * _descriptor.particlesCount  options:MTLResourceStorageModeShared]) // TODO switch resource to private
         {
-            auto* particle = reinterpret_cast<Particle*>([_buffer contents]);
-            for (auto i = unsigned{0}; i < _descriptor.particlesCount; ++i)
-            {
-                particle->position = _descriptor.worldPos;
-                particle->color = simd_make_float4(_descriptor.startColor.r, _descriptor.startColor.g, _descriptor.startColor.b, _descriptor.startColor.a);
-                particle->direction = _descriptor.randomDirection ? simd_make_float3(rng::Float(), rng::Float(), rng::Float()) : simd_make_float3(_descriptor.initialDirection.x, _descriptor.initialDirection.y, _descriptor.initialDirection.z);
-                particle->acceleration = _descriptor.randomAcceleration ? simd_make_float3(rng::Float(), rng::Float(), rng::Float()) : simd_make_float3(_descriptor.acceleration.x, _descriptor.acceleration.y, _descriptor.acceleration.z);
-                particle->speed = _descriptor.speed;
-                particle->scale = _descriptor.scale;
-                particle++;
+            @autoreleasepool {
+                id<MTLBuffer> temp = [gpu newBufferWithLength:sizeof(Particle) * _descriptor.particlesCount options:MTLResourceStorageModeShared];
+                auto* particle = reinterpret_cast<Particle*>([temp contents]);
+                for (auto i = unsigned{0}; i < _descriptor.particlesCount; ++i)
+                {
+                    particle->position = _descriptor.worldPos;
+                    particle->color = simd_make_float4(_descriptor.startColor.r, _descriptor.startColor.g, _descriptor.startColor.b, _descriptor.startColor.a);
+                    particle->direction = _descriptor.randomDirection ? simd_make_float3(rng::Float(), rng::Float(), rng::Float()) : simd_make_float3(_descriptor.initialDirection.x, _descriptor.initialDirection.y, _descriptor.initialDirection.z);
+                    particle->acceleration = _descriptor.randomAcceleration ? simd_make_float3(rng::Float(), rng::Float(), rng::Float()) : simd_make_float3(_descriptor.acceleration.x, _descriptor.acceleration.y, _descriptor.acceleration.z);
+                    particle->speed = _descriptor.speed;
+                    particle->scale = _descriptor.scale;
+                    particle++;
+                }
+
+                _buffer = [gpu newBufferWithLength:sizeof(Particle) * _descriptor.particlesCount options:MTLResourceStorageModePrivate];
+                id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
+                [blit copyFromBuffer:temp sourceOffset:0 toBuffer:_buffer destinationOffset:0 size:sizeof(Particle) * _descriptor.particlesCount];
+                [blit endEncoding];
             }
         }
 
@@ -185,7 +193,6 @@ namespace particles::metal
             [renderEncoder setFragmentBytes:&_descriptor.thickness length:sizeof(_descriptor.thickness) atIndex:0];
 
             [renderEncoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:1 instanceCount:_descriptor.particlesCount];
-//            [renderEncoder endEncoding];
             [renderEncoder popDebugGroup];
         }
 

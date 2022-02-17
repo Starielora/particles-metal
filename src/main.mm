@@ -23,7 +23,7 @@ GLFWwindow* createWindow(CAMetalLayer* metalLayer);
 CAMetalLayer* createMetalLayer(id<MTLDevice> gpu);
 id<MTLComputePipelineState> createPipelineState(id<MTLDevice> gpu);
 id<MTLLibrary> createLibrary(id<MTLDevice> gpu);
-void handleInput(GLFWwindow* window, float t, float deltaTime, Camera& camera, id<MTLDevice>, id<MTLLibrary>);
+void handleInput(GLFWwindow* window, float t, float deltaTime, Camera& camera, id<MTLDevice>, id<MTLLibrary>, id<MTLCommandBuffer>);
 
 const unsigned int SCR_WIDTH = 1920;
 const unsigned int SCR_HEIGHT = 1080;
@@ -60,7 +60,6 @@ int main()
         fpsValues.push_back(1.f / deltaTime);
 
         @autoreleasepool {
-            handleInput(window, currentFrame, deltaTime, camera, gpu, library);
 
             id<CAMetalDrawable> surface = [metalLayer nextDrawable];
             MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
@@ -68,7 +67,8 @@ int main()
             pass.colorAttachments[0].loadAction  = MTLLoadActionClear;
             pass.colorAttachments[0].storeAction = MTLStoreActionStore;
             pass.colorAttachments[0].texture = surface.texture;
-            auto commandBuffer = [queue commandBuffer];
+            id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
+            handleInput(window, currentFrame, deltaTime, camera, gpu, library, commandBuffer);
             for (auto&& emitter : emitters)
             {
                 emitter.update(currentFrame, commandBuffer);
@@ -160,7 +160,7 @@ id<MTLLibrary> createLibrary(id<MTLDevice> gpu)
     return lib;
 }
 
-void handleInput(GLFWwindow* window, float t, float deltaTime, Camera& camera, id<MTLDevice> gpu, id<MTLLibrary> library)
+void handleInput(GLFWwindow* window, float t, float deltaTime, Camera& camera, id<MTLDevice> gpu, id<MTLLibrary> library, id<MTLCommandBuffer> commandBuffer)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
@@ -190,7 +190,7 @@ void handleInput(GLFWwindow* window, float t, float deltaTime, Camera& camera, i
 
         {
             emitterDescriptor.worldPos = simd_make_float3(worldPos.x, worldPos.y, worldPos.z);
-            auto emitter = particles::metal::Emitter(emitterDescriptor, gpu, library);
+            auto emitter = particles::metal::Emitter(emitterDescriptor, gpu, library, commandBuffer);
             emitters.push_back(emitter);
         }
     }
