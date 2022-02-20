@@ -5,16 +5,16 @@
 using namespace metal;
 using namespace particles::metal;
 
-kernel void compute(texture2d<half, access::read_write> output [[texture(0)]], uint2 id [[thread_position_in_grid]])
-{
-    constexpr auto thickness = 0.25f;
-    const auto v = float2((float(id.x) / 400), (float(id.y) / 300));
-    const float len = length(v - float2(1, 1));
-    if (len < 1 - thickness || len > 1.f)
-        output.write(half4(0.0, 0.0, 0.0, 1.0), id);
-    else
-        output.write(half4(0.0, len, 0.5, 1.0), id);
-}
+//kernel void compute(texture2d<half, access::read_write> output [[texture(0)]], uint2 id [[thread_position_in_grid]])
+//{
+//    constexpr auto thickness = 0.25f;
+//    const auto v = float2((float(id.x) / 400), (float(id.y) / 300));
+//    const float len = length(v - float2(1, 1));
+//    if (len < 1 - thickness || len > 1.f)
+//        output.write(half4(0.0, 0.0, 0.0, 1.0), id);
+//    else
+//        output.write(half4(0.0, len, 0.5, 1.0), id);
+//}
 
 struct VertexShaderOutput
 {
@@ -33,7 +33,7 @@ vertex VertexShaderOutput instancedParticleVertexShader(const device Particle* p
     const device Particle& particle = particles[instance];
 
     return VertexShaderOutput {
-        projection * view * /*matrix_float4x4(1.f) */ float4(particle.position, 1)
+        projection * view * matrix_float4x4(1.f) * float4(particle.position, 1)
         , max(0.f, (particle.scale - length(particle.position - cameraPosition))) // TODO
         , particle.color
     };
@@ -44,9 +44,10 @@ fragment float4 circle(VertexShaderOutput in [[stage_in]]
                        , constant float& thickness [[buffer(0)]]
                        )
 {
+
     point = point + float2(-0.5, -0.5);
     half len = length(point);
-    if (len < (0.5 - thickness) || len > 0.5)
+    if (len < (0.5 - thickness/2) || len > 0.5)
         discard_fragment();
 
     return in.color;

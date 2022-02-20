@@ -7,10 +7,6 @@
 class Camera final
 {
 	float _speedMultiplier = 2.5f;
-	float _yaw = -90.0f;	// yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right so we initially rotate a bit to the left.
-	float _pitch = 0.0f;
-	float _lastX = 800.0f / 2.0;
-	float _lastY = 600.0 / 2.0;
 	float _fov = 45.0f;
 
 	glm::vec3 _cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);

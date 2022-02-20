@@ -7,13 +7,14 @@
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
+#include <imgui_impl_osx.h>
 #include <imgui_impl_metal.h>
 
 #include <Metal/Metal.h>
 
 namespace particles::metal::imgui
 {
-    void init(id<MTLDevice> device, GLFWwindow* window)
+    void init(NSView* view, id<MTLDevice> device)
     {
         // Setup Dear ImGui context
         IMGUI_CHECKVERSION();
@@ -26,21 +27,23 @@ namespace particles::metal::imgui
 
         // Setup Platform/Renderer backends
         // TODO check return values and react
-        ImGui_ImplGlfw_InitForOther(window, true);
         ImGui_ImplMetal_Init(device);
+        ImGui_ImplOSX_Init(view);
     }
 
     void deinit()
     {
         ImGui_ImplMetal_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
+        ImGui_ImplOSX_Shutdown();
+//        ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
     }
 
-    void newFrame(MTLRenderPassDescriptor* renderPassDescriptor)
+    void newFrame(MTLRenderPassDescriptor* renderPassDescriptor, NSView* view)
     {
         ImGui_ImplMetal_NewFrame(renderPassDescriptor);
-        ImGui_ImplGlfw_NewFrame();
+        ImGui_ImplOSX_NewFrame(view);
+//        ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
     }
 
@@ -51,6 +54,7 @@ namespace particles::metal::imgui
     }
 }
 
+#include <iostream>
 namespace particles::imgui
 {
     void drawFpsPlot(std::vector<float> values)

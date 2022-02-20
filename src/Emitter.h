@@ -9,15 +9,18 @@
 
 namespace particles::metal
 {
-    namespace rng
+    namespace // TODO yeet to separate file
     {
-        auto Float()
+        namespace rng
         {
-            static std::random_device rd{};
-            static auto seed = std::mt19937{ rd() };
-            static auto distribution = std::uniform_real_distribution<float>(-0.002f, 0.002f);
+            auto Float()
+            {
+                static std::random_device rd{};
+                static auto seed = std::mt19937{ rd() };
+                static auto distribution = std::uniform_real_distribution<float>(-0.002f, 0.002f);
 
-            return distribution(seed);
+                return distribution(seed);
+            }
         }
     }
 
@@ -115,7 +118,7 @@ namespace particles::metal
             int shape = 1; // 1 - circle, 2 - square, 3 - triangle
         };
 
-        Emitter(Descriptor descriptor, id<MTLDevice> gpu, id<MTLLibrary> library, id<MTLCommandBuffer> commandBuffer)
+        Emitter(Descriptor descriptor, id<MTLDevice> gpu, id<MTLLibrary> library, id<MTLCommandQueue> queue)
             : _descriptor(std::move(descriptor))
             , _life(_descriptor.lifeTimeFrames)
             , _particlesUpdatePipelineState(getComputePipelineState(gpu, library))
@@ -136,17 +139,19 @@ namespace particles::metal
                     particle++;
                 }
 
+                id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
                 _buffer = [gpu newBufferWithLength:sizeof(Particle) * _descriptor.particlesCount options:MTLResourceStorageModePrivate];
                 id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
                 [blit copyFromBuffer:temp sourceOffset:0 toBuffer:_buffer destinationOffset:0 size:sizeof(Particle) * _descriptor.particlesCount];
                 [blit endEncoding];
+                [commandBuffer commit];
             }
         }
 
         bool isDead() { return _life == 0; }
         const Descriptor& descriptor() { return _descriptor; }
 
-        void update(float currentFrame, id<MTLCommandBuffer> commandBuffer)
+        void update(id<MTLCommandBuffer> commandBuffer)
         {
             if(_life == 0)
             {
@@ -175,12 +180,12 @@ namespace particles::metal
 
         // TODO something is no yes with input parameters
         // I'd like to renderEncoder.endEncoding at the end. Probably will have to implement several render targets
-        void draw(MTLRenderPassDescriptor* passDescriptor, Camera& camera, id<MTLRenderCommandEncoder> renderEncoder)
+        void draw(MTLRenderPassDescriptor* passDescriptor, Camera& camera, id<MTLRenderCommandEncoder> renderEncoder, double windowWidth, double windowHeight)
         {
             assert(_life >= 0.f);
 
             auto view = camera.view();
-            auto projection = camera.projection(1920, 1080);
+            auto projection = camera.projection(windowWidth, windowHeight);
             simd_float3 cameraPos = simd_make_float3(camera.position().x, camera.position().y, camera.position().z);
 
             [renderEncoder pushDebugGroup:@"Draw particles"];
