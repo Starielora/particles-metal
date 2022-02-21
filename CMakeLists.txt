@@ -7,21 +7,21 @@ project(particles-metal LANGUAGES Swift OBJCXX CXX)
     add_subdirectory(deps)
 
     add_executable(particles-metal MACOSX_BUNDLE
-        src/ios/Main.swift
-        src/ios/ContentView.swift
-        src/ios/AppDelegate.swift
-        src/ios/Coordinator.swift
+        src/ui/Main.swift
+        src/ui/ContentView.swift
+        src/ui/AppDelegate.swift
+        src/ui/Coordinator.swift
 
         $<IF:$<PLATFORM_ID:iOS>,
-                src/ios/MetalView-iOS.swift
-                src/ios/MetalWindow-iOS.swift
+                src/ui/MetalView-iOS.swift
+                src/ui/MetalWindow-iOS.swift
             , #else
-                src/ios/MetalView-macOS.swift
-                src/ios/MetalWindow-macOS.swift
+                src/ui/MetalView-macOS.swift
+                src/ui/MetalWindow-macOS.swift
         >
 
-        src/ios/RendererWrapper.h
-        src/ios/RendererWrapper.mm
+        src/ui/RendererWrapper.h
+        src/ui/RendererWrapper.mm
         src/Renderer.h
         src/Renderer.mm
 
@@ -43,7 +43,7 @@ project(particles-metal LANGUAGES Swift OBJCXX CXX)
         PROPERTIES
         XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
         XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_WEAK YES
-        XCODE_ATTRIBUTE_SWIFT_OBJC_BRIDGING_HEADER src/ios/RendererWrapper.h
+        XCODE_ATTRIBUTE_SWIFT_OBJC_BRIDGING_HEADER src/ui/RendererWrapper.h
         XCODE_ATTRIBUTE_ENABLE_PREVIEWS YES # also set optimization level to -Onone
         XCODE_ATTRIBUTE_INFOPLIST_FILE ""
         XCODE_ATTRIBUTE_GENERATE_INFOPLIST_FILE YES
