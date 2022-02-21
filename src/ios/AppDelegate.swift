@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import Foundation
 
@@ -7,3 +8,4 @@ class AppDelegate : NSObject, NSApplicationDelegate
         return true;
     }
 }
+#endif

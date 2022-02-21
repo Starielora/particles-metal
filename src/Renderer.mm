@@ -21,14 +21,22 @@ namespace particles::metal
         int bloomIterations = 1;
     }
 
+#if TARGET_OS_IPHONE
+    Renderer::Renderer(UIView* view, id<MTLDevice> gpu)
+#elif TARGET_OS_OSX
     Renderer::Renderer(NSView* view, id<MTLDevice> gpu)
+#endif
         : _gpu(gpu)
         , _commandQueue([_gpu newCommandQueue])
         , _shadersLibrary([_gpu newDefaultLibrary])
         , _view(view)
     {
+#if TARGET_OS_IPHONE
+        imgui::init(_gpu);
+#elif TARGET_OS_OSX
         imgui::init(_view, _gpu);
-        initTextures(view.bounds.size.width, view.bounds.size.height);
+#endif
+        initTextures(_view.bounds.size.width, _view.bounds.size.height);
     }
 
     void Renderer::resize(int width, int height)
@@ -59,16 +67,23 @@ namespace particles::metal
     {
         const auto drawable = [view currentDrawable];
         const auto rpd = [view currentRenderPassDescriptor];
-        const auto commandBuffer = [_commandQueue commandBuffer];
 
-//        static auto LAST_FRAME = std::chrono::steady_clock::now();
-//        const auto currentFrame = std::chrono::steady_clock::now();
-//        const auto deltaTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(currentFrame - LAST_FRAME).count();
-//        const auto deltaTime = float(deltaTimeMs) / 1000.f;
-//        LAST_FRAME = currentFrame;
+        ImGuiIO& io = ImGui::GetIO();
+        io.DisplaySize.x = view.bounds.size.width;
+        io.DisplaySize.y = view.bounds.size.height;
+        CGFloat framebufferScale = view.window.screen.scale ?: UIScreen.mainScreen.scale;
+        io.DisplayFramebufferScale = ImVec2(framebufferScale, framebufferScale);
 
-//        FPS_VALUES.erase(FPS_VALUES.begin());
-//        FPS_VALUES.push_back(1.f / deltaTime);
+        static auto LAST_FRAME = std::chrono::steady_clock::now();
+        const auto currentFrame = std::chrono::steady_clock::now();
+        const auto deltaTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(currentFrame - LAST_FRAME).count();
+        const auto deltaTime = float(deltaTimeMs) / 1000.f;
+        LAST_FRAME = currentFrame;
+
+        io.DeltaTime = deltaTime;
+
+        FPS_VALUES.erase(FPS_VALUES.begin());
+        FPS_VALUES.push_back(1.f / deltaTime);
 
         processState();
 
@@ -76,10 +91,6 @@ namespace particles::metal
 
             auto drawable = [view currentDrawable];
             MTLRenderPassDescriptor *rpd = [view currentRenderPassDescriptor];
-            // pass.colorAttachments[0].clearColor = color;
-//            particlesRenderPass.colorAttachments[0].loadAction  = MTLLoadActionClear;
-//            particlesRenderPass.colorAttachments[0].storeAction = MTLStoreActionStore;
-//            particlesRenderPass.colorAttachments[0].texture = drawable.texture;
             rpd.colorAttachments[0].texture = _particlesTexture;
             id<MTLCommandBuffer> commandBuffer = [_commandQueue commandBuffer];
 
@@ -110,7 +121,7 @@ namespace particles::metal
 
             _finalTexture = _particlesTexture;
 
-                // Particles blur pass
+            // Particles blur pass
             {
                 if (blur)
                 {
@@ -121,7 +132,7 @@ namespace particles::metal
                 }
             }
 
-                // Particle blend pass
+            // Particle blend pass
             {
                 if (bloom)
                 {
@@ -134,9 +145,9 @@ namespace particles::metal
             rpd.colorAttachments[0].loadAction  = MTLLoadActionLoad;
             rpd.colorAttachments[0].texture = _finalTexture;
             id<MTLRenderCommandEncoder> imguiEncoder = [commandBuffer renderCommandEncoderWithDescriptor:rpd];
-            particles::metal::imgui::newFrame(rpd, _view);
+            particles::metal::imgui::newFrame(rpd);
             particles::imgui::drawCameraPane(camera);
-//            particles::imgui::drawFpsPlot(FPS_VALUES); TODO something is very wrong with this on osx
+            particles::imgui::drawFpsPlot(FPS_VALUES);
             particles::imgui::drawParticleSystemPane(_emitterDescriptor, aliveParticles, blur, bloom, blurSigma, bloomIterations);
             aliveParticles = 0;
             particles::metal::imgui::render(commandBuffer, imguiEncoder);
@@ -148,6 +159,7 @@ namespace particles::metal
 
             [commandBuffer presentDrawable:drawable];
             [commandBuffer commit];
+            [commandBuffer waitUntilCompleted];
         }
     }
 
@@ -157,7 +169,7 @@ namespace particles::metal
         const auto yTrans = ((ypos / _windowSize.y) * 2 - 1);
 
         const auto invProjection = glm::inverse(camera.projection(_windowSize.x, _windowSize.y)); // go back to camera coordinates
-        const auto offsetFromCamera = glm::vec3(invProjection * glm::vec4{ xTrans, yTrans, 1, 1 });
+        const auto offsetFromCamera = glm::vec3(invProjection * glm::vec4{ xTrans, -yTrans, 1, 1 });
 
         auto worldPos = camera.position() + offsetFromCamera;
 
@@ -166,7 +178,7 @@ namespace particles::metal
 
     void Renderer::setWindowSize(float w, float h)
     {
-        _windowSize = glm::vec2(w, h);
+        _windowSize = glm::vec2(w / _view.window.screen.scale, h / _view.window.screen.scale);
     }
 
     void Renderer::processState()
@@ -178,8 +190,29 @@ namespace particles::metal
         }
     }
 
+#if TARGET_OS_OSX
     void Renderer::forwardEventToImgui(NSEvent* event)
     {
         ImGui_ImplOSX_HandleEvent(event, _view);
     }
+#elif TARGET_OS_IPHONE
+    void Renderer::forwardEventToImgui(UIEvent* event)
+    {
+        UITouch *anyTouch = event.allTouches.anyObject;
+        CGPoint touchLocation = [anyTouch locationInView:_view];
+        ImGuiIO &io = ImGui::GetIO();
+        io.AddMousePosEvent(touchLocation.x, touchLocation.y);
+
+        BOOL hasActiveTouch = NO;
+        for (UITouch *touch in event.allTouches)
+        {
+            if (touch.phase != UITouchPhaseEnded && touch.phase != UITouchPhaseCancelled)
+            {
+                hasActiveTouch = YES;
+                break;
+            }
+        }
+        io.AddMouseButtonEvent(0, hasActiveTouch);
+    }
+#endif
 }

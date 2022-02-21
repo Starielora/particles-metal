@@ -6,15 +6,23 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <imgui.h>
-#include <imgui_impl_glfw.h>
+#if TARGET_OS_OSX
 #include <imgui_impl_osx.h>
+#endif
 #include <imgui_impl_metal.h>
 
 #include <Metal/Metal.h>
+#include <TargetConditionals.h>
+
+// TODO cleanup compilation conditionals. Make it more readable
 
 namespace particles::metal::imgui
 {
+#if TARGET_OS_OSX
     void init(NSView* view, id<MTLDevice> device)
+#else
+    void init(id<MTLDevice> device)
+#endif
     {
         // Setup Dear ImGui context
         IMGUI_CHECKVERSION();
@@ -28,22 +36,30 @@ namespace particles::metal::imgui
         // Setup Platform/Renderer backends
         // TODO check return values and react
         ImGui_ImplMetal_Init(device);
+#if TARGET_OS_OSX
         ImGui_ImplOSX_Init(view);
+#endif
     }
 
     void deinit()
     {
         ImGui_ImplMetal_Shutdown();
+#if TARGET_OS_OSX
         ImGui_ImplOSX_Shutdown();
-//        ImGui_ImplGlfw_Shutdown();
+#endif
         ImGui::DestroyContext();
     }
 
+#if TARGET_OS_OSX
     void newFrame(MTLRenderPassDescriptor* renderPassDescriptor, NSView* view)
+#else
+    void newFrame(MTLRenderPassDescriptor* renderPassDescriptor)
+#endif
     {
         ImGui_ImplMetal_NewFrame(renderPassDescriptor);
+#if TARGET_OS_OSX
         ImGui_ImplOSX_NewFrame(view);
-//        ImGui_ImplGlfw_NewFrame();
+#endif
         ImGui::NewFrame();
     }
 

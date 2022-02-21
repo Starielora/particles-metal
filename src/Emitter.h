@@ -100,7 +100,7 @@ namespace particles::metal
     public:
         struct Descriptor
         {
-            int particlesCount = 100;
+            int particlesCount = 64;
             int lifeTimeFrames = 100.f; // frames
             simd_float3 worldPos = simd_make_float3(0.f, 0.f, 0.f);
 //            simd_float4 startColor = simd_make_float4(1.f, 0.f, 0.f, 1.f);
@@ -145,6 +145,7 @@ namespace particles::metal
                 [blit copyFromBuffer:temp sourceOffset:0 toBuffer:_buffer destinationOffset:0 size:sizeof(Particle) * _descriptor.particlesCount];
                 [blit endEncoding];
                 [commandBuffer commit];
+                [commandBuffer waitUntilCompleted];
             }
         }
 
@@ -167,13 +168,14 @@ namespace particles::metal
             [computeEncoder pushDebugGroup:@"Particles update"];
             [computeEncoder setComputePipelineState:_particlesUpdatePipelineState];
             const auto width = _particlesUpdatePipelineState.threadExecutionWidth;
-            const auto threadsPerGroup = MTLSizeMake(width, 1, 1);
+            const auto threadsPerGroup = MTLSizeMake(1, 1, 1);
             const auto threadsPerGrid = MTLSizeMake(_descriptor.particlesCount, 1, 1);
             [computeEncoder setBuffer:_buffer offset:0 atIndex:0];
             [computeEncoder setBytes:&progress length:sizeof(progress) atIndex:1];
             [computeEncoder setBytes:&startColor length:sizeof(startColor) atIndex:2];
             [computeEncoder setBytes:&endColor length:sizeof(endColor) atIndex:3];
-            [computeEncoder dispatchThreads:threadsPerGrid threadsPerThreadgroup:threadsPerGroup];
+//            [computeEncoder dispatchThreads:threadsPerGrid threadsPerThreadgroup:threadsPerGroup];
+            [computeEncoder dispatchThreadgroups:threadsPerGrid threadsPerThreadgroup:threadsPerGroup];
             [computeEncoder endEncoding];
             [computeEncoder popDebugGroup];
         }
