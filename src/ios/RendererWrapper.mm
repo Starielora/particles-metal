@@ -1,13 +1,19 @@
 #include "RendererWrapper.h"
 #include "Renderer.h"
 
+#include <TargetConditionals.h>
+
 #include <memory>
 
 @implementation RendererWrapper
 
 std::unique_ptr<particles::metal::Renderer> renderer;
 
-- (id) initWithDevice:(id<MTLDevice>)gpu view:(UIView*)view;
+#if TARGET_OS_IPHONE
+- (id) initWithDevice:(id<MTLDevice>)gpu view:(UIView*)view
+#elif TARGET_OS_OSX
+- (id) initWithDevice:(id<MTLDevice>)gpu view:(NSView*)view
+#endif
 {
     renderer = std::make_unique<particles::metal::Renderer>(view, gpu);
     return self;
@@ -34,7 +40,11 @@ std::unique_ptr<particles::metal::Renderer> renderer;
     renderer->resize(w, h); // TODO merge both
 }
 
+#if TARGET_OS_IPHONE
 - (void) forwardEventToImGui:(UIEvent*)event
+#elif TARGET_OS_OSX
+- (void) forwardEventToImGui:(NSEvent*)event
+#endif
 {
     renderer->forwardEventToImgui(event);
 }

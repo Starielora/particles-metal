@@ -71,7 +71,11 @@ namespace particles::metal
         ImGuiIO& io = ImGui::GetIO();
         io.DisplaySize.x = view.bounds.size.width;
         io.DisplaySize.y = view.bounds.size.height;
+#if TARGET_OS_OSX
+        CGFloat framebufferScale = view.window.screen.backingScaleFactor ?: NSScreen.mainScreen.backingScaleFactor;
+#else
         CGFloat framebufferScale = view.window.screen.scale ?: UIScreen.mainScreen.scale;
+#endif
         io.DisplayFramebufferScale = ImVec2(framebufferScale, framebufferScale);
 
         static auto LAST_FRAME = std::chrono::steady_clock::now();
@@ -145,7 +149,11 @@ namespace particles::metal
             rpd.colorAttachments[0].loadAction  = MTLLoadActionLoad;
             rpd.colorAttachments[0].texture = _finalTexture;
             id<MTLRenderCommandEncoder> imguiEncoder = [commandBuffer renderCommandEncoderWithDescriptor:rpd];
+#if TARGET_OS_OSX
+            particles::metal::imgui::newFrame(rpd, view);
+#elif TARGET_OS_IPHONE
             particles::metal::imgui::newFrame(rpd);
+#endif
             particles::imgui::drawCameraPane(camera);
             particles::imgui::drawFpsPlot(FPS_VALUES);
             particles::imgui::drawParticleSystemPane(_emitterDescriptor, aliveParticles, blur, bloom, blurSigma, bloomIterations);
@@ -169,7 +177,12 @@ namespace particles::metal
         const auto yTrans = ((ypos / _windowSize.y) * 2 - 1);
 
         const auto invProjection = glm::inverse(camera.projection(_windowSize.x, _windowSize.y)); // go back to camera coordinates
+        // TODO OSX window has different origin
+#if TARGET_OS_IPHONE
         const auto offsetFromCamera = glm::vec3(invProjection * glm::vec4{ xTrans, -yTrans, 1, 1 });
+#elif TARGET_OS_OSX
+        const auto offsetFromCamera = glm::vec3(invProjection * glm::vec4{ xTrans, yTrans, 1, 1 });
+#endif
 
         auto worldPos = camera.position() + offsetFromCamera;
 
@@ -178,7 +191,11 @@ namespace particles::metal
 
     void Renderer::setWindowSize(float w, float h)
     {
+#if TARGET_OS_OSX
+        _windowSize = glm::vec2(w, h);
+#elif TARGET_OS_IPHONE
         _windowSize = glm::vec2(w / _view.window.screen.scale, h / _view.window.screen.scale);
+#endif
     }
 
     void Renderer::processState()

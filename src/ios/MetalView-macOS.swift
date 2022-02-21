@@ -9,7 +9,7 @@ class MetalView: MTKView
         guard let gpu = MTLCreateSystemDefaultDevice() else {
             fatalError("Could not create gpu");
         }
-        super.init(frame: UIScreen.main.bounds, device: gpu)
+        super.init(frame: NSScreen.main!.frame, device: gpu)
         super.delegate = coordinator;
         super.preferredFramesPerSecond = 60
         super.enableSetNeedsDisplay = true;
@@ -17,7 +17,7 @@ class MetalView: MTKView
         super.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1);
         super.isPaused = false;
 
-        renderer = RendererWrapper(device: gpu, self)
+        renderer = RendererWrapper(device: gpu, view: self)
         coordinator.renderer = renderer
     }
 

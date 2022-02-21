@@ -10,9 +10,15 @@ project(particles-metal LANGUAGES Swift OBJCXX CXX)
         src/ios/Main.swift
         src/ios/ContentView.swift
         src/ios/AppDelegate.swift
-        src/ios/MetalView-iOS.swift
-        src/ios/MetalWindow-iOS.swift
         src/ios/Coordinator.swift
+
+        $<IF:$<PLATFORM_ID:iOS>,
+                src/ios/MetalView-iOS.swift
+                src/ios/MetalWindow-iOS.swift
+            , #else
+                src/ios/MetalView-macOS.swift
+                src/ios/MetalWindow-macOS.swift
+        >
 
         src/ios/RendererWrapper.h
         src/ios/RendererWrapper.mm

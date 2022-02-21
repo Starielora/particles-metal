@@ -17,9 +17,11 @@ add_library(Dear-ImGui STATIC
     imgui/imstb_textedit.h
     imgui/imstb_truetype.h
 
-    # backends
-    # imgui/backends/imgui_impl_osx.h
-    # imgui/backends/imgui_impl_osx.mm
+    $<IF:$<PLATFORM_ID:Darwin>,
+        imgui/backends/imgui_impl_osx.h
+        imgui/backends/imgui_impl_osx.mm
+    , # else nothing
+    >
 
     imgui/backends/imgui_impl_metal.h
     imgui/backends/imgui_impl_metal.mm

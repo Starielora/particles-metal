@@ -75,8 +75,16 @@ namespace particles::imgui
 {
     void drawFpsPlot(std::vector<float> values)
     {
+        // TODO classic ImGui::GetIO().Framerate does not work well on Apple outside glfw :(
+        const auto averageFPS = [&values](){
+            auto sum = float{0};
+            for (auto v : values)
+                sum += v;
+            return sum / values.size();
+        }();
+
         ImGui::Begin("FPS");
-        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / averageFPS, averageFPS);
         ImGui::PlotLines("", &values[0], values.size(), 0, nullptr, 1.f, 144.0f, ImVec2(0, 100.0f));
         ImGui::End();
     }
