@@ -11,7 +11,7 @@ class MetalView: MTKView
         }
         super.init(frame: NSScreen.main!.frame, device: gpu)
         super.delegate = coordinator;
-        super.preferredFramesPerSecond = 60
+        super.preferredFramesPerSecond = 120
         super.enableSetNeedsDisplay = true;
         super.framebufferOnly = false;
         super.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1);

@@ -62,6 +62,8 @@ namespace particles::metal
         id<MTLTexture> _bloomTexture;
         id<MTLTexture> _finalTexture;
 
+        id<MTLBuffer> _cameraBuffer;
+
     private:
         void processState();
         void initTextures(int width, int height);

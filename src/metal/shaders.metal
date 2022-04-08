@@ -5,17 +5,6 @@
 using namespace metal;
 using namespace particles::metal;
 
-//kernel void compute(texture2d<half, access::read_write> output [[texture(0)]], uint2 id [[thread_position_in_grid]])
-//{
-//    constexpr auto thickness = 0.25f;
-//    const auto v = float2((float(id.x) / 400), (float(id.y) / 300));
-//    const float len = length(v - float2(1, 1));
-//    if (len < 1 - thickness || len > 1.f)
-//        output.write(half4(0.0, 0.0, 0.0, 1.0), id);
-//    else
-//        output.write(half4(0.0, len, 0.5, 1.0), id);
-//}
-
 struct VertexShaderOutput
 {
     float4 position [[position]];
@@ -23,14 +12,21 @@ struct VertexShaderOutput
     float4 color;
 };
 
-vertex VertexShaderOutput instancedParticleVertexShader(const device Particle* particles [[buffer(0)]]
-                                                      , constant matrix_float4x4& view [[buffer(1)]]
-                                                      , constant matrix_float4x4& projection [[buffer(2)]]
-                                                      , constant float3& cameraPosition [[buffer(3)]]
+struct VertexShaderArgBuffer
+{
+    const device Particle* particles [[id(0)]];
+    const constant CameraBuffer* camera [[id(1)]];
+};
+
+vertex VertexShaderOutput instancedParticleVertexShader(
+                                                        constant VertexShaderArgBuffer& argbuf [[buffer(0)]]
                                                       , uint instance [[instance_id]]
                                                       )
 {
-    const device Particle& particle = particles[instance];
+    const device Particle& particle = argbuf.particles[instance];
+    const constant auto& projection = argbuf.camera->projection;
+    const constant auto& view = argbuf.camera->view;
+    const constant auto& cameraPosition = argbuf.camera->position;
 
     return VertexShaderOutput {
         projection * view * matrix_float4x4(1.f) * float4(particle.position, 1)
@@ -41,10 +37,10 @@ vertex VertexShaderOutput instancedParticleVertexShader(const device Particle* p
 
 fragment float4 circle(VertexShaderOutput in [[stage_in]]
                        , float2 point [[point_coord]]
-                       , constant float& thickness [[buffer(0)]]
+                       , constant DescriptorBuffer* descriptor [[buffer(0)]]
                        )
 {
-
+    const float thickness = descriptor->thickness;
     point = point + float2(-0.5, -0.5);
     half len = length(point);
     if (len < (0.5 - thickness/2) || len > 0.5)
@@ -56,9 +52,10 @@ fragment float4 circle(VertexShaderOutput in [[stage_in]]
 fragment float4 square(
                        VertexShaderOutput in [[stage_in]]
                        , float2 point [[point_coord]]
-                       , constant float& thickness [[buffer(0)]]
+                       , constant DescriptorBuffer* descriptor [[buffer(0)]]
                        )
 {
+    const float thickness = descriptor->thickness;
     point = point + float2(-0.5, -0.5);
     half x = point.x;
     half y = point.y;
@@ -73,7 +70,7 @@ fragment float4 square(
 
 fragment float4 triangle(VertexShaderOutput in [[stage_in]]
                          , float2 point [[point_coord]]
-                         , constant float& thickness [[buffer(0)]])
+                         , constant DescriptorBuffer* descriptor [[buffer(0)]])
 {
     point = point + float2(-0.5, -0.5);
     half x = point.x;
@@ -93,15 +90,13 @@ fragment float4 triangle(VertexShaderOutput in [[stage_in]]
 }
 
 kernel void updateParticle(device Particle* particles [[buffer(0)]]
-                           , constant float& progress [[buffer(1)]]
-                           , constant simd_float4& startColor [[buffer(2)]]
-                           , constant simd_float4& endColor [[buffer(3)]]
+                           , constant DescriptorBuffer* descriptor [[buffer(1)]]
                            , uint id [[thread_position_in_grid]])
 {
     device auto& particle = particles[id];
     const float3 velocity = particle.direction * particle.speed;
     particle.position += velocity;
     particle.direction += particle.acceleration / particle.speed;
-    particle.color = mix(startColor, endColor, progress); // TODO if all particles have the same color this could be computed once on CPU
+    particle.color = mix(descriptor->startColor, descriptor->endColor, descriptor->progress); // TODO compute on CPU?
 }
 

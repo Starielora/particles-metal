@@ -13,4 +13,21 @@ namespace particles::metal
         float speed = 1.f;
         float scale = 1.f;
     };
+
+    // TODO temp to implement arg buffers and icb
+    struct CameraBuffer
+    {
+        simd_float4x4 view;
+        simd_float4x4 projection;
+        simd_float3 position;
+    };
+
+    struct DescriptorBuffer
+    {
+        simd_float4 startColor;
+        simd_float4 endColor;
+        simd_float4 currentColor;
+        float thickness;
+        float progress;
+    };
 }

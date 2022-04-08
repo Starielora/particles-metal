@@ -6,6 +6,8 @@
 #include <Metal/Metal.h>
 
 #include <random>
+#include <unordered_map>
+#include <string>
 
 namespace particles::metal
 {
@@ -33,26 +35,27 @@ namespace particles::metal
             if (!computePipelineState)
             {
                 id<MTLFunction> function = [library newFunctionWithName:@"updateParticle"];
-
+                auto* descriptor = [MTLComputePipelineDescriptor new];
+                descriptor.supportIndirectCommandBuffers = true;
+                descriptor.computeFunction = function;
                 NSError* errors;
-                computePipelineState = [gpu newComputePipelineStateWithFunction:function error:&errors];
+
+                computePipelineState = [gpu newComputePipelineStateWithDescriptor:descriptor options:{} reflection:nullptr error:&errors];
                 assert(!errors);
             }
 
             return computePipelineState;
         }
 
-        id<MTLRenderPipelineState> getRenderPipelineState(id<MTLDevice> gpu, id<MTLLibrary> library, const char* const vertexShaderName, const char* const fragmentShaderName)
+        id<MTLRenderPipelineState> getRenderPipelineState(id<MTLDevice> gpu, id<MTLLibrary> library, id<MTLFunction> vertexShader, id<MTLFunction> fragmentShader)
         {
-            id<MTLFunction> vertexShader = [library newFunctionWithName:[NSString stringWithUTF8String:vertexShaderName]];
-            id<MTLFunction> fragmentShader = [library newFunctionWithName:[NSString stringWithUTF8String:fragmentShaderName]];
-
             MTLRenderPipelineDescriptor* pipelineDescriptor = [MTLRenderPipelineDescriptor new];
 
             pipelineDescriptor.vertexFunction = vertexShader;
             pipelineDescriptor.fragmentFunction = fragmentShader;
 
             pipelineDescriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+            pipelineDescriptor.supportIndirectCommandBuffers = true;
             NSError* errors;
             id<MTLRenderPipelineState> renderPipelineState = [gpu newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&errors];
 
@@ -61,36 +64,51 @@ namespace particles::metal
             return renderPipelineState;
         }
 
-        id<MTLRenderPipelineState> getRenderPipelineState(id<MTLDevice> gpu, id<MTLLibrary> library, int shape)
+        id<MTLFunction> getFunction(std::string shaderName, id<MTLLibrary> library)
         {
-            static id<MTLRenderPipelineState> circle;
-            static id<MTLRenderPipelineState> square;
-            static id<MTLRenderPipelineState> triangle;
-            if (shape == 0)
-            {
-                if (!square) {
-                    square = getRenderPipelineState(gpu, library, "instancedParticleVertexShader", "square");
-                }
-                return square;
-            }
-            else if (shape == 1)
-            {
-                if (!circle) {
-                    circle = getRenderPipelineState(gpu, library, "instancedParticleVertexShader", "circle");
-                }
-                return circle;
+            static auto memo = std::unordered_map<std::string, id<MTLFunction>>{};
 
-            }
-            else if (shape == 2)
+            const auto it = memo.find(shaderName);
+            if (it != memo.end())
             {
-                if (!triangle) {
-                    triangle = getRenderPipelineState(gpu, library, "instancedParticleVertexShader", "triangle");
-                }
-                return triangle;
+                return it->second;
             }
             else
             {
-                return circle;
+                const auto function = [library newFunctionWithName:[NSString stringWithUTF8String:shaderName.c_str()]];
+                memo.insert({std::move(shaderName), function});
+                return function;
+            }
+        }
+
+        id<MTLRenderPipelineState> getRenderPipelineState(id<MTLDevice> gpu, id<MTLLibrary> library, int shape)
+        {
+            using ShaderNames = struct {
+                const std::string vertex;
+                const std::string fragment;
+            };
+
+            static const auto shapeToShader = std::unordered_map<int, ShaderNames>{
+                  {0, {"instancedParticleVertexShader", "square"}}
+                , {1, {"instancedParticleVertexShader", "circle"}}
+                , {2, {"instancedParticleVertexShader","triangle"}}
+            };
+
+            static auto memo = std::unordered_map<decltype(shape), id<MTLRenderPipelineState>>{};
+
+            const auto it = memo.find(shape);
+            if(it != memo.end())
+            {
+                return it->second;
+            }
+            else
+            {
+                const auto shaderName = shapeToShader.at(shape);
+                const auto vertexShader = getFunction(shaderName.vertex, library);
+                const auto fragmentShader = getFunction(shaderName.fragment, library);
+                const auto pipelineState = getRenderPipelineState(gpu, library, vertexShader, fragmentShader);
+                memo.insert({shape, pipelineState});
+                return pipelineState;
             }
         }
     }
@@ -118,14 +136,17 @@ namespace particles::metal
             int shape = 1; // 1 - circle, 2 - square, 3 - triangle
         };
 
-        Emitter(Descriptor descriptor, id<MTLDevice> gpu, id<MTLLibrary> library, id<MTLCommandQueue> queue)
+        Emitter(Descriptor descriptor, id<MTLDevice> gpu, id<MTLLibrary> library, id<MTLCommandQueue> queue, id<MTLBuffer> cameraBuffer)
             : _descriptor(std::move(descriptor))
             , _life(_descriptor.lifeTimeFrames)
             , _particlesUpdatePipelineState(getComputePipelineState(gpu, library))
             , _renderPipelineState(getRenderPipelineState(gpu, library, _descriptor.shape))
-//            , _buffer([gpu newBufferWithLength:sizeof(Particle) * _descriptor.particlesCount  options:MTLResourceStorageModeShared]) // TODO switch resource to private
         {
             @autoreleasepool {
+                const auto width = _particlesUpdatePipelineState.threadExecutionWidth;
+                _threadsPerGroup = MTLSizeMake(1, 1, 1);
+                _threadsPerGrid = MTLSizeMake(_descriptor.particlesCount, 1, 1);
+
                 id<MTLBuffer> temp = [gpu newBufferWithLength:sizeof(Particle) * _descriptor.particlesCount options:MTLResourceStorageModeShared];
                 auto* particle = reinterpret_cast<Particle*>([temp contents]);
                 for (auto i = unsigned{0}; i < _descriptor.particlesCount; ++i)
@@ -146,13 +167,62 @@ namespace particles::metal
                 [blit endEncoding];
                 [commandBuffer commit];
                 [commandBuffer waitUntilCompleted];
+
+                // argument buffer
+                const auto vertexFunction = getFunction("instancedParticleVertexShader", library);
+                const auto argEncoder = [vertexFunction newArgumentEncoderWithBufferIndex:0];
+                _vertexArgBuffer = [gpu newBufferWithLength:argEncoder.encodedLength options:MTLResourceStorageModeShared]; // TODO can resource storage be private?
+                _vertexArgBuffer.label = @"Vertex function argument buffer";
+                [argEncoder setArgumentBuffer:_vertexArgBuffer offset:0];
+                [argEncoder setBuffer:_buffer offset:0 atIndex:0];
+                [argEncoder setBuffer:cameraBuffer offset:0 atIndex:1];
+
+                // Descriptor buffer
+                _descriptorBuffer = [gpu newBufferWithLength:sizeof(DescriptorBuffer) options:MTLResourceStorageModeShared];
+                auto* const descriptorBufferPtr = reinterpret_cast<DescriptorBuffer*>([_descriptorBuffer contents]);
+                descriptorBufferPtr->startColor = simd_make_float4(_descriptor.startColor.x, _descriptor.startColor.y, _descriptor.startColor.z, _descriptor.startColor.w);
+                descriptorBufferPtr->endColor = simd_make_float4(_descriptor.endColor.x, _descriptor.endColor.y, _descriptor.endColor.z, _descriptor.endColor.w);
+                descriptorBufferPtr->currentColor = descriptorBufferPtr->startColor;
+                descriptorBufferPtr->thickness = _descriptor.thickness;
+                descriptorBufferPtr->progress = 0.0;
+
+                // ICB descriptor
+                const auto icbDescriptor = [MTLIndirectCommandBufferDescriptor new];
+//                icbDescriptor.commandTypes = MTLIndirectCommandTypeDraw;
+                icbDescriptor.inheritBuffers = false;
+                icbDescriptor.maxVertexBufferBindCount = 25; // TODO far too many;
+                icbDescriptor.maxFragmentBufferBindCount = 25; // TODO far too many;
+                icbDescriptor.inheritPipelineState = false;
+
+                // kernel shader - update positions
+                icbDescriptor.commandTypes = MTLIndirectCommandTypeConcurrentDispatch;
+                _kernelICB = [gpu newIndirectCommandBufferWithDescriptor:icbDescriptor maxCommandCount:1 options:{}];
+                {
+                    const auto icbCommand = [_kernelICB indirectComputeCommandAtIndex:0];
+                    [icbCommand setComputePipelineState:_particlesUpdatePipelineState];
+//                    [icbCommand setKernelBuffer:_buffer offset:0 atIndex:0];
+//                    [icbCommand setKernelBuffer:_descriptorBuffer offset:0 atIndex:1];
+//                    [computeEncoder dispatchThreads:threadsPerGrid threadsPerThreadgroup:threadsPerGroup];
+                    [icbCommand concurrentDispatchThreadgroups:_threadsPerGrid threadsPerThreadgroup:_threadsPerGroup];
+                }
+
+                // render command
+                icbDescriptor.commandTypes = MTLIndirectCommandTypeDraw;
+                _renderICB = [gpu newIndirectCommandBufferWithDescriptor:icbDescriptor maxCommandCount:1 options:{}];
+                {
+                    const auto icbCommand = [_renderICB indirectRenderCommandAtIndex:0];
+                    [icbCommand setRenderPipelineState:_renderPipelineState];
+                    [icbCommand setVertexBuffer:_vertexArgBuffer offset:0 atIndex:0];
+                    [icbCommand setFragmentBuffer:_descriptorBuffer offset:0 atIndex:0];
+                    [icbCommand drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:1 instanceCount:_descriptor.particlesCount baseInstance:0];
+                }
             }
         }
 
         bool isDead() { return _life == 0; }
         const Descriptor& descriptor() { return _descriptor; }
 
-        void update(id<MTLCommandBuffer> commandBuffer)
+        void update(id<MTLComputeCommandEncoder> computeEncoder)
         {
             if(_life == 0)
             {
@@ -160,46 +230,37 @@ namespace particles::metal
             }
             _life--;
 
-            float progress = 1 - float(_life) / float(_descriptor.lifeTimeFrames);
-            simd_float4 startColor = simd_make_float4(_descriptor.startColor.x, _descriptor.startColor.y, _descriptor.startColor.z, _descriptor.startColor.w);
-            simd_float4 endColor = simd_make_float4(_descriptor.endColor.x, _descriptor.endColor.y, _descriptor.endColor.z, _descriptor.endColor.w);
+            auto* const descriptorBufferPtr = reinterpret_cast<DescriptorBuffer*>([_descriptorBuffer contents]);
+            descriptorBufferPtr->progress = 1 - float(_life) / float(_descriptor.lifeTimeFrames);
 
-            auto computeEncoder = [commandBuffer computeCommandEncoder];
-            [computeEncoder pushDebugGroup:@"Particles update"];
-            [computeEncoder setComputePipelineState:_particlesUpdatePipelineState];
-            const auto width = _particlesUpdatePipelineState.threadExecutionWidth;
-            const auto threadsPerGroup = MTLSizeMake(1, 1, 1);
-            const auto threadsPerGrid = MTLSizeMake(_descriptor.particlesCount, 1, 1);
-            [computeEncoder setBuffer:_buffer offset:0 atIndex:0];
-            [computeEncoder setBytes:&progress length:sizeof(progress) atIndex:1];
-            [computeEncoder setBytes:&startColor length:sizeof(startColor) atIndex:2];
-            [computeEncoder setBytes:&endColor length:sizeof(endColor) atIndex:3];
-//            [computeEncoder dispatchThreads:threadsPerGrid threadsPerThreadgroup:threadsPerGroup];
-            [computeEncoder dispatchThreadgroups:threadsPerGrid threadsPerThreadgroup:threadsPerGroup];
-            [computeEncoder endEncoding];
-            [computeEncoder popDebugGroup];
+            {
+                [computeEncoder pushDebugGroup:@"Particles update"];
+                [computeEncoder setComputePipelineState:_particlesUpdatePipelineState];
+                [computeEncoder setBuffer:_descriptorBuffer offset:0 atIndex:1];
+                [computeEncoder setBuffer:_buffer offset:0 atIndex:0];
+    //            [computeEncoder dispatchThreads:threadsPerGrid threadsPerThreadgroup:threadsPerGroup];
+                [computeEncoder dispatchThreadgroups:_threadsPerGrid threadsPerThreadgroup:_threadsPerGroup];
+                [computeEncoder popDebugGroup];
+            }
+//            {
+//                [computeEncoder pushDebugGroup:@"Particles update"];
+//                [computeEncoder executeCommandsInBuffer:_kernelICB withRange:NSMakeRange(0, 1)];
+//                [computeEncoder popDebugGroup];
+//            }
         }
 
         // TODO something is no yes with input parameters
         // I'd like to renderEncoder.endEncoding at the end. Probably will have to implement several render targets
-        void draw(MTLRenderPassDescriptor* passDescriptor, Camera& camera, id<MTLRenderCommandEncoder> renderEncoder, double windowWidth, double windowHeight)
+        void draw(MTLRenderPassDescriptor* passDescriptor, id<MTLBuffer> cameraBuffer, id<MTLRenderCommandEncoder> renderEncoder)
         {
-            assert(_life >= 0.f);
-
-            auto view = camera.view();
-            auto projection = camera.projection(windowWidth, windowHeight);
-            simd_float3 cameraPos = simd_make_float3(camera.position().x, camera.position().y, camera.position().z);
+            if(_life == 0)
+            {
+                return;
+            }
+            _life--;
 
             [renderEncoder pushDebugGroup:@"Draw particles"];
-            [renderEncoder setRenderPipelineState:_renderPipelineState];
-            [renderEncoder setVertexBuffer:_buffer offset:0 atIndex:0];
-            [renderEncoder setVertexBytes:&view[0][0] length:sizeof(simd_float4x4) atIndex:1];
-            [renderEncoder setVertexBytes:&projection[0][0] length:sizeof(simd_float4x4) atIndex:2];
-            [renderEncoder setVertexBytes:&cameraPos length:sizeof(cameraPos) atIndex:3];
-
-            [renderEncoder setFragmentBytes:&_descriptor.thickness length:sizeof(_descriptor.thickness) atIndex:0];
-
-            [renderEncoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:1 instanceCount:_descriptor.particlesCount];
+            [renderEncoder executeCommandsInBuffer:_renderICB withRange:NSMakeRange(0, 1)];
             [renderEncoder popDebugGroup];
         }
 
@@ -207,7 +268,15 @@ namespace particles::metal
         const Descriptor _descriptor;
         int _life;
         id<MTLBuffer> _buffer;
+        id<MTLBuffer> _vertexArgBuffer;
+        id<MTLBuffer> _descriptorBuffer;
         id<MTLComputePipelineState> _particlesUpdatePipelineState;
         id<MTLRenderPipelineState> _renderPipelineState;
+
+        id<MTLIndirectCommandBuffer> _renderICB;
+        id<MTLIndirectCommandBuffer> _kernelICB;
+
+        MTLSize _threadsPerGroup;
+        MTLSize _threadsPerGrid;
     };
 }

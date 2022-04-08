@@ -60,6 +60,8 @@ namespace particles::metal
             _blurTexture = [_gpu newTextureWithDescriptor:textureDescriptor];
             _bloomTexture = [_gpu newTextureWithDescriptor:textureDescriptor];
             _finalTexture = [_gpu newTextureWithDescriptor:textureDescriptor];
+
+            _cameraBuffer = [_gpu newBufferWithLength:sizeof(CameraBuffer) options:MTLResourceStorageModeShared];
         }
     }
 
@@ -98,14 +100,28 @@ namespace particles::metal
             rpd.colorAttachments[0].texture = _particlesTexture;
             id<MTLCommandBuffer> commandBuffer = [_commandQueue commandBuffer];
 
+            // update camera
+            // TODO reimplement camera to not copy data each frame
+            {
+                auto view = camera.view();
+                auto projection = camera.projection(_windowSize.x, _windowSize.y);
+
+                auto* cameraBuffer = reinterpret_cast<CameraBuffer*>([_cameraBuffer contents]);
+                cameraBuffer->view = *reinterpret_cast<simd_float4x4*>(std::addressof(view));
+                cameraBuffer->projection = *reinterpret_cast<simd_float4x4*>(std::addressof(projection));
+                cameraBuffer->position = simd_make_float3(camera.position().x, camera.position().y, camera.position().z);
+            }
+
             // Particles render pass
             {
+                auto computeEncoder = [commandBuffer computeCommandEncoder];
                 for (auto&& emitter : _emitters)
                 {
-                    emitter.update(commandBuffer);
+                    emitter.update(computeEncoder);
                 }
+                [computeEncoder endEncoding];
 
-                id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:rpd];
+                id<MTLRenderCommandEncoder> renderEncoder = [commandBuffer renderCommandEncoderWithDescriptor:rpd];
                 for (auto emitter = _emitters.begin(); emitter != _emitters.end(); emitter++)
                 {
                     if (emitter->isDead())
@@ -114,13 +130,13 @@ namespace particles::metal
                     }
                     else
                     {
-                        emitter->draw(rpd, camera, encoder, _windowSize.x, _windowSize.y);
+                        emitter->draw(rpd, _cameraBuffer, renderEncoder);
                         aliveParticles += emitter->descriptor().particlesCount;
                     }
                 }
 
                 // TODO yeet this to separate encoder
-                [encoder endEncoding];
+                [renderEncoder endEncoding];
             }
 
             _finalTexture = _particlesTexture;
@@ -202,7 +218,7 @@ namespace particles::metal
     {
         if (_shouldEmit)
         {
-            auto emitter = particles::metal::Emitter(_emitterDescriptor, _gpu, _shadersLibrary, _commandQueue);
+            auto emitter = particles::metal::Emitter(_emitterDescriptor, _gpu, _shadersLibrary, _commandQueue, _cameraBuffer);
             _emitters.push_back(emitter);
         }
     }
