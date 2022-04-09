@@ -166,7 +166,8 @@ namespace particles::metal
                 [blit copyFromBuffer:temp sourceOffset:0 toBuffer:_buffer destinationOffset:0 size:sizeof(Particle) * _descriptor.particlesCount];
                 [blit endEncoding];
                 [commandBuffer commit];
-                [commandBuffer waitUntilCompleted];
+                // TODO should this be synced?
+                // [commandBuffer waitUntilCompleted];
 
                 // argument buffer
                 const auto vertexFunction = getFunction("instancedParticleVertexShader", library);

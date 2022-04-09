@@ -183,7 +183,6 @@ namespace particles::metal
 
             [commandBuffer presentDrawable:drawable];
             [commandBuffer commit];
-            [commandBuffer waitUntilCompleted];
         }
     }
 
