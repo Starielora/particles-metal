@@ -35,6 +35,13 @@ vertex VertexShaderOutput instancedParticleVertexShader(
     };
 }
 
+fragment float4 color(VertexShaderOutput in [[stage_in]]
+                      , float2 point [[point_coord]]
+                      , constant DescriptorBuffer* descriptor [[buffer(0)]])
+{
+    return in.color;
+}
+
 fragment float4 circle(VertexShaderOutput in [[stage_in]]
                        , float2 point [[point_coord]]
                        , constant DescriptorBuffer* descriptor [[buffer(0)]]

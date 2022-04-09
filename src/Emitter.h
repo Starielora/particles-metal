@@ -91,7 +91,8 @@ namespace particles::metal
             static const auto shapeToShader = std::unordered_map<int, ShaderNames>{
                   {0, {"instancedParticleVertexShader", "square"}}
                 , {1, {"instancedParticleVertexShader", "circle"}}
-                , {2, {"instancedParticleVertexShader","triangle"}}
+                , {2, {"instancedParticleVertexShader", "triangle"}}
+                , {3, {"instancedParticleVertexShader", "color"}}
             };
 
             static auto memo = std::unordered_map<decltype(shape), id<MTLRenderPipelineState>>{};
@@ -119,7 +120,7 @@ namespace particles::metal
         struct Descriptor
         {
             int particlesCount = 64;
-            int lifeTimeFrames = 100.f; // frames
+            int lifeTimeFrames = 100; // frames
             simd_float3 worldPos = simd_make_float3(0.f, 0.f, 0.f);
 //            simd_float4 startColor = simd_make_float4(1.f, 0.f, 0.f, 1.f);
             glm::vec4 startColor = glm::vec4(1.f, 0.f, 0.f, 1.f); // for imgui purposes

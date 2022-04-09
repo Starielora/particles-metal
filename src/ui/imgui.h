@@ -104,7 +104,7 @@ namespace particles::imgui
     {
         ImGui::Begin("Particle system");
         ImGui::Text((std::string("Alive particles: ") + std::to_string(aliveParticles)).c_str());
-        ImGui::SliderInt("Spawn count", &descriptor.particlesCount, 1, 1e4);
+        ImGui::SliderInt("Spawn count", &descriptor.particlesCount, 1, 1e6);
         ImGui::SliderFloat("Scale", &descriptor.scale, 1.f, 100.f);
         ImGui::ColorEdit4("Start", glm::value_ptr(descriptor.startColor));
         ImGui::ColorEdit4("End", glm::value_ptr(descriptor.endColor));
@@ -141,6 +141,8 @@ namespace particles::imgui
         ImGui::RadioButton("Circle", &descriptor.shape, 1);
         ImGui::SameLine();
         ImGui::RadioButton("Triangle", &descriptor.shape, 2);
+        ImGui::SameLine();
+        ImGui::RadioButton("Color", &descriptor.shape, 3);
 
         ImGui::Checkbox("Gaussian blur", &blur);
         ImGui::BeginDisabled(!blur);
