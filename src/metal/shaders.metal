@@ -19,8 +19,8 @@ struct VertexShaderArgBuffer
 };
 
 vertex VertexShaderOutput instancedParticleVertexShader(
-                                                        constant VertexShaderArgBuffer& argbuf [[buffer(0)]]
-                                                      , uint instance [[instance_id]]
+                                                        constant const VertexShaderArgBuffer& argbuf [[buffer(0)]]
+                                                      , const uint instance [[instance_id]]
                                                       )
 {
     const device Particle& particle = argbuf.particles[instance];
@@ -97,8 +97,8 @@ fragment float4 triangle(VertexShaderOutput in [[stage_in]]
 }
 
 kernel void updateParticle(device Particle* particles [[buffer(0)]]
-                           , constant DescriptorBuffer* descriptor [[buffer(1)]]
-                           , uint id [[thread_position_in_grid]])
+                           , constant const DescriptorBuffer* descriptor [[buffer(1)]]
+                           , const uint id [[thread_position_in_grid]])
 {
     device auto& particle = particles[id];
     const float3 velocity = particle.direction * particle.speed;

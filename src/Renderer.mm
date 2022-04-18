@@ -67,9 +67,6 @@ namespace particles::metal
 
     void Renderer::draw(MTKView* view)
     {
-        const auto drawable = [view currentDrawable];
-        const auto rpd = [view currentRenderPassDescriptor];
-
         ImGuiIO& io = ImGui::GetIO();
         io.DisplaySize.x = view.bounds.size.width;
         io.DisplaySize.y = view.bounds.size.height;
@@ -95,7 +92,7 @@ namespace particles::metal
 
         @autoreleasepool {
 
-            auto drawable = [view currentDrawable];
+            const auto drawable = [view currentDrawable];
             MTLRenderPassDescriptor *rpd = [view currentRenderPassDescriptor];
             rpd.colorAttachments[0].texture = _particlesTexture;
             id<MTLCommandBuffer> commandBuffer = [_commandQueue commandBuffer];
@@ -114,25 +111,27 @@ namespace particles::metal
 
             // Particles render pass
             {
+                for (auto emitter = _emitters.begin(); emitter != _emitters.end(); emitter++)
+                {
+                    emitter->updateLife();
+                    if (emitter->isDead())
+                    {
+                        emitter = _emitters.erase(emitter);
+                    }
+                }
+
                 auto computeEncoder = [commandBuffer computeCommandEncoder];
                 for (auto&& emitter : _emitters)
                 {
-                    emitter.update(computeEncoder);
+                    emitter.updateParticles(computeEncoder);
                 }
                 [computeEncoder endEncoding];
 
                 id<MTLRenderCommandEncoder> renderEncoder = [commandBuffer renderCommandEncoderWithDescriptor:rpd];
                 for (auto emitter = _emitters.begin(); emitter != _emitters.end(); emitter++)
                 {
-                    if (emitter->isDead())
-                    {
-                        emitter = _emitters.erase(emitter);
-                    }
-                    else
-                    {
-                        emitter->draw(rpd, _cameraBuffer, renderEncoder);
-                        aliveParticles += emitter->descriptor().particlesCount;
-                    }
+                    emitter->draw(rpd, _cameraBuffer, renderEncoder);
+                    aliveParticles += emitter->descriptor().particlesCount;
                 }
 
                 // TODO yeet this to separate encoder
@@ -183,6 +182,7 @@ namespace particles::metal
 
             [commandBuffer presentDrawable:drawable];
             [commandBuffer commit];
+//            [commandBuffer waitUntilCompleted];
         }
     }
 
