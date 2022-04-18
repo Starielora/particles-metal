@@ -12,24 +12,19 @@ struct VertexShaderOutput
     float4 color;
 };
 
-struct VertexShaderArgBuffer
-{
-    const device Particle* particles [[id(0)]];
-    const constant CameraBuffer* camera [[id(1)]];
-};
-
 vertex VertexShaderOutput instancedParticleVertexShader(
-                                                        constant const VertexShaderArgBuffer& argbuf [[buffer(0)]]
+                                                        const device Particle* particles [[buffer(0)]]
+                                                      , const constant CameraBuffer* camera [[buffer(1)]]
                                                       , const uint instance [[instance_id]]
                                                       )
 {
-    const device Particle& particle = argbuf.particles[instance];
-    const constant auto& projection = argbuf.camera->projection;
-    const constant auto& view = argbuf.camera->view;
-    const constant auto& cameraPosition = argbuf.camera->position;
+    const device Particle& particle = particles[instance];
+    const constant auto& projection = camera->projection;
+    const constant auto& view = camera->view;
+    const constant auto& cameraPosition = camera->position;
 
     return VertexShaderOutput {
-        projection * view * matrix_float4x4(1.f) * float4(particle.position, 1)
+        projection * view /** matrix_float4x4(1.f)*/ * float4(particle.position, 1)
         , max(0.f, (particle.scale - length(particle.position - cameraPosition))) // TODO
         , particle.color
     };

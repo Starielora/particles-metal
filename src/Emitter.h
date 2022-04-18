@@ -171,17 +171,6 @@ namespace particles::metal
                 // TODO should this be synced?
                 // [commandBuffer waitUntilCompleted];
 
-                // argument buffers
-                {
-                    const auto vertexFunction = getFunction("instancedParticleVertexShader", library);
-                    const auto argEncoder = [vertexFunction newArgumentEncoderWithBufferIndex:0];
-                    _vertexArgBuffer = [gpu newBufferWithLength:argEncoder.encodedLength options:MTLResourceStorageModeShared]; // TODO can resource storage be private?
-                    _vertexArgBuffer.label = @"Vertex function argument buffer";
-                    [argEncoder setArgumentBuffer:_vertexArgBuffer offset:0];
-                    [argEncoder setBuffer:_buffer offset:0 atIndex:0];
-                    [argEncoder setBuffer:cameraBuffer offset:0 atIndex:1];
-                }
-
                 // Descriptor buffer
                 _descriptorBuffer = [gpu newBufferWithLength:sizeof(DescriptorBuffer) options:MTLResourceStorageModeShared];
                 auto* const descriptorBufferPtr = reinterpret_cast<DescriptorBuffer*>([_descriptorBuffer contents]);
@@ -221,7 +210,8 @@ namespace particles::metal
 
                     const auto icbCommand = [_renderICB indirectRenderCommandAtIndex:0];
                     [icbCommand setRenderPipelineState:_renderPipelineState];
-                    [icbCommand setVertexBuffer:_vertexArgBuffer offset:0 atIndex:0];
+                    [icbCommand setVertexBuffer:_buffer offset:0 atIndex:0];
+                    [icbCommand setVertexBuffer:cameraBuffer offset:0 atIndex:1];
                     [icbCommand setFragmentBuffer:_descriptorBuffer offset:0 atIndex:0];
                     [icbCommand drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:1 instanceCount:_descriptor.particlesCount baseInstance:0];
                 }
@@ -264,7 +254,6 @@ namespace particles::metal
         const Descriptor _descriptor;
         int _life;
         id<MTLBuffer> _buffer;
-        id<MTLBuffer> _vertexArgBuffer;
         id<MTLBuffer> _descriptorBuffer;
         id<MTLComputePipelineState> _particlesUpdatePipelineState;
         id<MTLRenderPipelineState> _renderPipelineState;
