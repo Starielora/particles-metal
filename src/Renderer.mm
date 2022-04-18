@@ -15,6 +15,7 @@ namespace particles::metal
     {
         std::vector<float> FPS_VALUES(100, 0);
         int aliveParticles = 0;
+        int aliveEmitters = 0;
         bool blur = true;
         bool bloom = true;
         float blurSigma = 9.0f;
@@ -132,6 +133,7 @@ namespace particles::metal
                 {
                     emitter->draw(rpd, _cameraBuffer, renderEncoder);
                     aliveParticles += emitter->descriptor().particlesCount;
+                    aliveEmitters++;
                 }
 
                 // TODO yeet this to separate encoder
@@ -171,8 +173,9 @@ namespace particles::metal
 #endif
             particles::imgui::drawCameraPane(camera);
             particles::imgui::drawFpsPlot(FPS_VALUES);
-            particles::imgui::drawParticleSystemPane(_emitterDescriptor, aliveParticles, blur, bloom, blurSigma, bloomIterations);
+            particles::imgui::drawParticleSystemPane(_emitterDescriptor, aliveParticles, aliveEmitters, blur, bloom, blurSigma, bloomIterations);
             aliveParticles = 0;
+            aliveEmitters = 0;
             particles::metal::imgui::render(commandBuffer, imguiEncoder);
             [imguiEncoder endEncoding];
 

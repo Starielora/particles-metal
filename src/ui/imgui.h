@@ -100,10 +100,11 @@ namespace particles::imgui
         ImGui::End();
     }
 
-    void drawParticleSystemPane(particles::metal::Emitter::Descriptor& descriptor, int aliveParticles, bool& blur, bool& bloom, float& sigma, int& iterations)
+    void drawParticleSystemPane(particles::metal::Emitter::Descriptor& descriptor, int aliveParticles, int aliveEmitters, bool& blur, bool& bloom, float& sigma, int& iterations)
     {
         ImGui::Begin("Particle system");
         ImGui::Text((std::string("Alive particles: ") + std::to_string(aliveParticles)).c_str());
+        ImGui::Text((std::string("Alive emitters: ") + std::to_string(aliveEmitters)).c_str());
         ImGui::SliderInt("Spawn count", &descriptor.particlesCount, 1, 1e6);
         ImGui::SliderFloat("Scale", &descriptor.scale, 1.f, 100.f);
         ImGui::ColorEdit4("Start", glm::value_ptr(descriptor.startColor));
